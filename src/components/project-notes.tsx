@@ -17,6 +17,7 @@ export function ProjectNotes({ projectId, initialNotes }: ProjectNotesProps) {
   const [saving, setSaving] = useState(false);
 
   const editor = useEditor({
+    immediatelyRender: false,
     extensions: [
       StarterKit,
       Placeholder.configure({

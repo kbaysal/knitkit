@@ -9,6 +9,7 @@ import {
   Calculator,
   Ruler,
   Home,
+  Tangent,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -17,6 +18,7 @@ const navItems = [
   { href: "/dashboard/glossary", label: "Glossary", icon: BookOpen },
   { href: "/dashboard/gauge", label: "Gauge", icon: Calculator },
   { href: "/dashboard/converter", label: "Converter", icon: Ruler },
+  { href: "/dashboard/ravelry", label: "Ravelry", icon: Tangent },
 ];
 
 export function AppSidebar() {

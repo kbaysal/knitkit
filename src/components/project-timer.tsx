@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
-import { Play, Pause, Clock } from "lucide-react";
+import { Play, Pause, Square, Clock } from "lucide-react";
 import { startTimer, stopTimer } from "@/app/actions/timer";
 
 interface ProjectTimerProps {
@@ -25,7 +25,9 @@ export function ProjectTimer({
   activeSession,
 }: ProjectTimerProps) {
   const [active, setActive] = useState(activeSession);
+  const [paused, setPaused] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [pausedElapsed, setPausedElapsed] = useState(0);
   const intervalRef = useRef<ReturnType<typeof setInterval>>(null);
 
   // Calculate cumulative time from completed sessions
@@ -36,7 +38,7 @@ export function ProjectTimer({
     }, 0);
 
   useEffect(() => {
-    if (active) {
+    if (active && !paused) {
       const updateElapsed = () => {
         setElapsed(Date.now() - new Date(active.startedAt).getTime());
       };
@@ -45,22 +47,47 @@ export function ProjectTimer({
       return () => {
         if (intervalRef.current) clearInterval(intervalRef.current);
       };
-    } else {
-      setElapsed(0);
     }
-  }, [active]);
+  }, [active, paused]);
 
-  async function handleToggle() {
-    if (active) {
+  async function handleStart() {
+    if (paused && active) {
+      // Resume — stop the old session (already saved), start a new one
       await stopTimer(active.id);
-      setActive(null);
+      const session = await startTimer(projectId);
+      setActive(session);
+      setPaused(false);
+      setPausedElapsed(0);
     } else {
       const session = await startTimer(projectId);
       setActive(session);
+      setPaused(false);
+      setPausedElapsed(0);
     }
   }
 
-  const totalTime = completedTime + elapsed;
+  async function handlePause() {
+    if (!active) return;
+    // Save elapsed so far, stop the server session, but keep UI in paused state
+    await stopTimer(active.id);
+    setPausedElapsed((prev) => prev + elapsed);
+    setElapsed(0);
+    setPaused(true);
+    // Keep active reference so UI knows we're paused (not fully stopped)
+  }
+
+  async function handleStop() {
+    if (active && !paused) {
+      await stopTimer(active.id);
+    }
+    setActive(null);
+    setPaused(false);
+    setElapsed(0);
+    setPausedElapsed(0);
+  }
+
+  const totalTime = completedTime + elapsed + pausedElapsed;
+  const isRunning = active !== null && !paused;
 
   return (
     <div className="flex items-center gap-2 rounded-lg border px-3 py-2">
@@ -68,21 +95,29 @@ export function ProjectTimer({
       <span className="min-w-[120px] text-sm font-mono tabular-nums">
         {formatDuration(totalTime)}
       </span>
-      <Button
-        variant={active ? "destructive" : "outline"}
-        size="sm"
-        onClick={handleToggle}
-      >
-        {active ? (
-          <>
-            <Pause className="mr-1 h-3 w-3" /> Stop
-          </>
-        ) : (
-          <>
-            <Play className="mr-1 h-3 w-3" /> Start
-          </>
-        )}
-      </Button>
+      {isRunning ? (
+        <>
+          <Button variant="outline" size="icon" className="h-7 w-7" onClick={handlePause} title="Pause">
+            <Pause className="h-3 w-3" />
+          </Button>
+          <Button variant="destructive" size="icon" className="h-7 w-7" onClick={handleStop} title="Stop">
+            <Square className="h-3 w-3" />
+          </Button>
+        </>
+      ) : paused ? (
+        <>
+          <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleStart} title="Resume">
+            <Play className="h-3 w-3" />
+          </Button>
+          <Button variant="destructive" size="icon" className="h-7 w-7" onClick={handleStop} title="Stop">
+            <Square className="h-3 w-3" />
+          </Button>
+        </>
+      ) : (
+        <Button variant="outline" size="icon" className="h-7 w-7" onClick={handleStart} title="Start">
+          <Play className="h-3 w-3" />
+        </Button>
+      )}
     </div>
   );
 }

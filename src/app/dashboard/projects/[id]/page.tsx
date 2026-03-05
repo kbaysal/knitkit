@@ -28,7 +28,14 @@ export default async function ProjectDetailPage({
 
   return (
     <ProjectDetailClient
-      project={project}
+      project={{
+        id: project.id,
+        name: project.name,
+        status: project.status,
+        currentRow: project.currentRow,
+        totalRows: project.totalRows,
+        ravelryMetadata: project.ravelryMetadata as Record<string, unknown> | null,
+      }}
       document={document}
       notes={notesData}
       timerSessions={timerSessions}

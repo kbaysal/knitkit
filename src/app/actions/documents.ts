@@ -43,7 +43,8 @@ export async function createDocument(data: {
 export async function updateRulerPosition(
   documentId: string,
   pageNumber: number,
-  position: number
+  position: number,
+  height: number = 32
 ) {
   const { userId } = await auth();
   if (!userId) throw new Error("Unauthorized");
@@ -55,8 +56,8 @@ export async function updateRulerPosition(
 
   if (!doc[0]) throw new Error("Document not found");
 
-  const positions = (doc[0].rulerPositions as Record<string, number>) ?? {};
-  positions[String(pageNumber)] = position;
+  const positions = (doc[0].rulerPositions as Record<string, unknown>) ?? {};
+  positions[String(pageNumber)] = { position, height };
 
   await db
     .update(documents)

@@ -17,11 +17,15 @@ export async function GET() {
     );
   }
 
-  const authUrl = new URL("https://www.ravelry.com/oauth2/auth");
-  authUrl.searchParams.set("response_type", "code");
-  authUrl.searchParams.set("client_id", clientId);
-  authUrl.searchParams.set("redirect_uri", redirectUri);
-  authUrl.searchParams.set("scope", "offline");
+  const params = new URLSearchParams({
+    response_type: "code",
+    client_id: clientId,
+    redirect_uri: redirectUri,
+    scope: "patternstore-read",
+    state: userId,
+  });
 
-  return NextResponse.redirect(authUrl.toString());
+  return NextResponse.redirect(
+    `https://www.ravelry.com/oauth2/auth?${params.toString()}`
+  );
 }

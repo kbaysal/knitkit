@@ -1,9 +1,9 @@
-import { getProjects } from "@/app/actions/projects";
+import { getProjectsWithThumbnails } from "@/app/actions/projects";
 import { ProjectCard } from "@/components/project-card";
 import { CreateProjectDialog } from "@/components/create-project-dialog";
 
 export default async function DashboardPage() {
-  const projectList = await getProjects();
+  const projectList = await getProjectsWithThumbnails();
 
   return (
     <div>
@@ -22,7 +22,12 @@ export default async function DashboardPage() {
       ) : (
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {projectList.map((project) => (
-            <ProjectCard key={project.id} project={project} />
+            <ProjectCard
+              key={project.id}
+              project={project}
+              thumbnailUrl={project.thumbnailUrl}
+              ravelryPhotoUrl={project.ravelryPhotoUrl}
+            />
           ))}
         </div>
       )}

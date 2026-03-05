@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -14,6 +15,7 @@ import {
   Redo2,
   Trash2,
   Save,
+  Check,
 } from "lucide-react";
 import { getAnnotation, saveAnnotation } from "@/app/actions/annotations";
 
@@ -23,6 +25,7 @@ interface AnnotationCanvasProps {
   documentId: string;
   pageNumber: number;
   scale: number;
+  toolbarContainer?: HTMLElement | null;
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -31,6 +34,7 @@ type FabricCanvas = any;
 export function AnnotationCanvas({
   documentId,
   pageNumber,
+  toolbarContainer,
 }: AnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const fabricRef = useRef<FabricCanvas>(null);
@@ -40,6 +44,28 @@ export function AnnotationCanvas({
   const historyRef = useRef<string[]>([]);
   const historyIndexRef = useRef(-1);
   const [, forceUpdate] = useState(0);
+  const [savedIndicator, setSavedIndicator] = useState(false);
+
+  // Auto-save refs
+  const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isInitializedRef = useRef(false);
+
+  // Drag-to-draw refs
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const drawingShapeRef = useRef<any>(null);
+  const isDrawingShapeRef = useRef(false);
+  const drawOriginRef = useRef<{ x: number; y: number }>({ x: 0, y: 0 });
+
+  const triggerAutoSave = useCallback(() => {
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+    autoSaveTimerRef.current = setTimeout(async () => {
+      if (!fabricRef.current) return;
+      const json = fabricRef.current.toJSON();
+      await saveAnnotation(documentId, pageNumber, json);
+      setSavedIndicator(true);
+      setTimeout(() => setSavedIndicator(false), 1500);
+    }, 2000);
+  }, [documentId, pageNumber]);
 
   // Initialize Fabric canvas
   useEffect(() => {
@@ -72,7 +98,9 @@ export function AnnotationCanvas({
       const json = JSON.stringify(canvas.toJSON());
       historyRef.current = [json];
       historyIndexRef.current = 0;
+      isInitializedRef.current = true;
 
+      // History tracking + auto-save on object:added
       canvas.on("object:added", () => {
         if (cancelled) return;
         const jsonStr = JSON.stringify(canvas.toJSON());
@@ -80,6 +108,22 @@ export function AnnotationCanvas({
         historyRef.current = historyRef.current.slice(0, idx + 1);
         historyRef.current.push(jsonStr);
         historyIndexRef.current = historyRef.current.length - 1;
+        if (isInitializedRef.current) triggerAutoSave();
+      });
+
+      canvas.on("object:modified", () => {
+        if (cancelled) return;
+        triggerAutoSave();
+      });
+
+      canvas.on("object:removed", () => {
+        if (cancelled) return;
+        triggerAutoSave();
+      });
+
+      canvas.on("path:created", () => {
+        if (cancelled) return;
+        triggerAutoSave();
       });
     }
 
@@ -87,12 +131,13 @@ export function AnnotationCanvas({
 
     return () => {
       cancelled = true;
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
       if (fabricRef.current) {
         fabricRef.current.dispose();
         fabricRef.current = null;
       }
     };
-  }, [documentId, pageNumber]);
+  }, [documentId, pageNumber, triggerAutoSave]);
 
   // Update tool mode
   useEffect(() => {
@@ -120,41 +165,19 @@ export function AnnotationCanvas({
     })();
   }, [activeTool, strokeColor, strokeWidth]);
 
-  // Add shapes on click
+  // Drag-to-draw for rect, circle, arrow; click-to-place for text
   useEffect(() => {
     const canvas = fabricRef.current;
     if (!canvas) return;
     if (!["rect", "circle", "text", "arrow"].includes(activeTool)) return;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const handler = async (e: any) => {
+    const handleMouseDown = async (e: any) => {
       const fabric = await import("fabric");
       const pointer = canvas.getViewportPoint(e.e);
 
-      if (activeTool === "rect") {
-        canvas.add(
-          new fabric.Rect({
-            left: pointer.x,
-            top: pointer.y,
-            width: 100,
-            height: 60,
-            fill: "transparent",
-            stroke: strokeColor,
-            strokeWidth,
-          })
-        );
-      } else if (activeTool === "circle") {
-        canvas.add(
-          new fabric.Circle({
-            left: pointer.x,
-            top: pointer.y,
-            radius: 40,
-            fill: "transparent",
-            stroke: strokeColor,
-            strokeWidth,
-          })
-        );
-      } else if (activeTool === "text") {
+      if (activeTool === "text") {
+        // Text stays click-to-place
         canvas.add(
           new fabric.IText("Text", {
             left: pointer.x,
@@ -163,21 +186,106 @@ export function AnnotationCanvas({
             fill: strokeColor,
           })
         );
-      } else if (activeTool === "arrow") {
-        canvas.add(
-          new fabric.Line(
-            [pointer.x, pointer.y, pointer.x + 100, pointer.y],
-            { stroke: strokeColor, strokeWidth }
-          )
-        );
+        setActiveTool("select");
+        return;
       }
 
+      // Start drag-to-draw
+      isDrawingShapeRef.current = true;
+      drawOriginRef.current = { x: pointer.x, y: pointer.y };
+
+      if (activeTool === "rect") {
+        const rect = new fabric.Rect({
+          left: pointer.x,
+          top: pointer.y,
+          width: 0,
+          height: 0,
+          fill: "transparent",
+          stroke: strokeColor,
+          strokeWidth,
+          selectable: false,
+          evented: false,
+        });
+        canvas.add(rect);
+        drawingShapeRef.current = rect;
+      } else if (activeTool === "circle") {
+        const circle = new fabric.Circle({
+          left: pointer.x,
+          top: pointer.y,
+          radius: 0,
+          fill: "transparent",
+          stroke: strokeColor,
+          strokeWidth,
+          selectable: false,
+          evented: false,
+        });
+        canvas.add(circle);
+        drawingShapeRef.current = circle;
+      } else if (activeTool === "arrow") {
+        const line = new fabric.Line(
+          [pointer.x, pointer.y, pointer.x, pointer.y],
+          {
+            stroke: strokeColor,
+            strokeWidth,
+            selectable: false,
+            evented: false,
+          }
+        );
+        canvas.add(line);
+        drawingShapeRef.current = line;
+      }
+    };
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const handleMouseMove = (e: any) => {
+      if (!isDrawingShapeRef.current || !drawingShapeRef.current) return;
+      const pointer = canvas.getViewportPoint(e.e);
+      const origin = drawOriginRef.current;
+      const shape = drawingShapeRef.current;
+
+      if (activeTool === "rect") {
+        const left = Math.min(origin.x, pointer.x);
+        const top = Math.min(origin.y, pointer.y);
+        shape.set({
+          left,
+          top,
+          width: Math.abs(pointer.x - origin.x),
+          height: Math.abs(pointer.y - origin.y),
+        });
+      } else if (activeTool === "circle") {
+        const dx = pointer.x - origin.x;
+        const dy = pointer.y - origin.y;
+        const radius = Math.sqrt(dx * dx + dy * dy);
+        shape.set({
+          radius,
+          left: origin.x - radius,
+          top: origin.y - radius,
+        });
+      } else if (activeTool === "arrow") {
+        shape.set({ x2: pointer.x, y2: pointer.y });
+      }
+
+      canvas.renderAll();
+    };
+
+    const handleMouseUp = () => {
+      if (!isDrawingShapeRef.current || !drawingShapeRef.current) return;
+      const shape = drawingShapeRef.current;
+      shape.set({ selectable: true, evented: true });
+      canvas.setActiveObject(shape);
+      canvas.renderAll();
+      drawingShapeRef.current = null;
+      isDrawingShapeRef.current = false;
       setActiveTool("select");
     };
 
-    canvas.on("mouse:down", handler);
+    canvas.on("mouse:down", handleMouseDown);
+    canvas.on("mouse:move", handleMouseMove);
+    canvas.on("mouse:up", handleMouseUp);
     return () => {
-      canvas.off("mouse:down", handler);
+      canvas.off("mouse:down", handleMouseDown);
+      canvas.off("mouse:move", handleMouseMove);
+      canvas.off("mouse:up", handleMouseUp);
     };
   }, [activeTool, strokeColor, strokeWidth]);
 
@@ -212,8 +320,11 @@ export function AnnotationCanvas({
 
   async function handleSave() {
     if (!fabricRef.current) return;
+    if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
     const json = fabricRef.current.toJSON();
     await saveAnnotation(documentId, pageNumber, json);
+    setSavedIndicator(true);
+    setTimeout(() => setSavedIndicator(false), 1500);
   }
 
   const tools: { tool: Tool; icon: React.ElementType; label: string }[] = [
@@ -226,43 +337,56 @@ export function AnnotationCanvas({
     { tool: "arrow", icon: ArrowRight, label: "Arrow" },
   ];
 
+  const toolbarContent = (
+    <div className="flex flex-wrap items-center gap-1 rounded-lg border bg-background/95 p-1 shadow-lg backdrop-blur">
+      {tools.map((t) => (
+        <Button
+          key={t.tool}
+          variant={activeTool === t.tool ? "default" : "ghost"}
+          size="icon"
+          className="h-8 w-8"
+          onClick={() => setActiveTool(t.tool)}
+          title={t.label}
+        >
+          <t.icon className="h-4 w-4" />
+        </Button>
+      ))}
+      <div className="mx-1 h-8 w-px bg-border" />
+      <Input
+        type="color"
+        value={strokeColor}
+        onChange={(e) => setStrokeColor(e.target.value)}
+        className="h-8 w-8 cursor-pointer border-0 p-0"
+      />
+      <div className="mx-1 h-8 w-px bg-border" />
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} title="Undo">
+        <Undo2 className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} title="Redo">
+        <Redo2 className="h-4 w-4" />
+      </Button>
+      <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClear} title="Clear">
+        <Trash2 className="h-4 w-4" />
+      </Button>
+      <Button variant="default" size="icon" className="h-8 w-8" onClick={handleSave} title="Save">
+        <Save className="h-4 w-4" />
+      </Button>
+      {savedIndicator && (
+        <span className="ml-1 flex items-center gap-1 text-xs text-green-600">
+          <Check className="h-3 w-3" /> Saved
+        </span>
+      )}
+    </div>
+  );
+
   return (
     <div className="absolute inset-0 z-20">
-      {/* Annotation toolbar */}
-      <div className="absolute left-2 top-2 z-30 flex flex-wrap gap-1 rounded-lg border bg-background/95 p-1 shadow-lg backdrop-blur">
-        {tools.map((t) => (
-          <Button
-            key={t.tool}
-            variant={activeTool === t.tool ? "default" : "ghost"}
-            size="icon"
-            className="h-8 w-8"
-            onClick={() => setActiveTool(t.tool)}
-            title={t.label}
-          >
-            <t.icon className="h-4 w-4" />
-          </Button>
-        ))}
-        <div className="mx-1 h-8 w-px bg-border" />
-        <Input
-          type="color"
-          value={strokeColor}
-          onChange={(e) => setStrokeColor(e.target.value)}
-          className="h-8 w-8 cursor-pointer border-0 p-0"
-        />
-        <div className="mx-1 h-8 w-px bg-border" />
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleUndo} title="Undo">
-          <Undo2 className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleRedo} title="Redo">
-          <Redo2 className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-8 w-8" onClick={handleClear} title="Clear">
-          <Trash2 className="h-4 w-4" />
-        </Button>
-        <Button variant="default" size="icon" className="h-8 w-8" onClick={handleSave} title="Save">
-          <Save className="h-4 w-4" />
-        </Button>
-      </div>
+      {/* Annotation toolbar: portal to parent container or inline fallback */}
+      {toolbarContainer === undefined ? (
+        <div className="absolute left-2 top-2 z-30">{toolbarContent}</div>
+      ) : toolbarContainer ? (
+        createPortal(toolbarContent, toolbarContainer)
+      ) : null}
       <canvas ref={canvasRef} className="absolute inset-0" />
     </div>
   );
