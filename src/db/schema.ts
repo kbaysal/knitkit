@@ -91,3 +91,15 @@ export const customGlossary = pgTable("custom_glossary", {
   description: text("description").notNull(),
   createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export const bookmarks = pgTable("bookmarks", {
+  id: uuid("id").defaultRandom().primaryKey(),
+  documentId: uuid("document_id")
+    .references(() => documents.id, { onDelete: "cascade" })
+    .notNull(),
+  clerkUserId: text("clerk_user_id").notNull(),
+  pageNumber: integer("page_number").notNull(),
+  yPosition: integer("y_position"),
+  name: text("name").notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});

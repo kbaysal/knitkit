@@ -19,7 +19,7 @@ export default function DashboardLayout({
               <span className="font-semibold text-lg">KnitKit</span>
               <UserButton />
             </header>
-            <main className="flex-1 overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">
+            <main className="flex flex-1 flex-col overflow-y-auto p-4 pb-20 md:p-6 md:pb-6">
               {children}
             </main>
             <BottomNav />

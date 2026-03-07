@@ -27,7 +27,8 @@ export default async function ProjectDetailPage({
     ]);
 
   return (
-    <ProjectDetailClient
+    <div className="h-full flex flex-col min-h-0">
+      <ProjectDetailClient
       project={{
         id: project.id,
         name: project.name,
@@ -43,5 +44,6 @@ export default async function ProjectDetailPage({
       photos={photos}
       shareToken={shareToken}
     />
+    </div>
   );
 }

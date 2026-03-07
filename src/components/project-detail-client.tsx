@@ -96,7 +96,7 @@ export function ProjectDetailClient({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="flex flex-col h-full min-h-0 gap-4">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
@@ -187,7 +187,7 @@ export function ProjectDetailClient({
       </div>
 
       {/* Tabs */}
-      <Tabs defaultValue="pattern" className="w-full">
+      <Tabs defaultValue="pattern" className="flex flex-col min-h-0 flex-1">
         <TabsList>
           <TabsTrigger value="pattern">Pattern</TabsTrigger>
           <TabsTrigger value="notes">Notes</TabsTrigger>
@@ -197,7 +197,7 @@ export function ProjectDetailClient({
           )}
         </TabsList>
 
-        <TabsContent value="pattern" className="mt-4">
+        <TabsContent value="pattern" className="mt-4 flex flex-col min-h-0 flex-1">
           {document ? (
             <PdfViewer
               document={document}

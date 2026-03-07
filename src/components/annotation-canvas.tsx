@@ -16,15 +16,17 @@ import {
   Trash2,
   Save,
   Check,
+  Hand,
 } from "lucide-react";
 import { getAnnotation, saveAnnotation } from "@/app/actions/annotations";
 
-type Tool = "select" | "pen" | "highlighter" | "rect" | "circle" | "text" | "arrow";
+type Tool = "select" | "pen" | "highlighter" | "rect" | "circle" | "text" | "arrow" | "hand";
 
 interface AnnotationCanvasProps {
   documentId: string;
   pageNumber: number;
   scale: number;
+  visible: boolean;
   toolbarContainer?: HTMLElement | null;
 }
 
@@ -34,6 +36,8 @@ type FabricCanvas = any;
 export function AnnotationCanvas({
   documentId,
   pageNumber,
+  scale,
+  visible,
   toolbarContainer,
 }: AnnotationCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -79,11 +83,31 @@ export function AnnotationCanvas({
       const parent = canvasRef.current.parentElement;
       if (!parent) return;
 
+      // Wait for parent to have dimensions (PDF may not have rendered yet)
+      if (parent.clientWidth === 0 || parent.clientHeight === 0) {
+        await new Promise<void>((resolve) => {
+          const ro = new ResizeObserver(() => {
+            if (parent.clientWidth > 0 && parent.clientHeight > 0) {
+              ro.disconnect();
+              resolve();
+            }
+          });
+          ro.observe(parent);
+        });
+        if (cancelled || !canvasRef.current) return;
+      }
+
       const canvas = new fabric.Canvas(canvasRef.current, {
         width: parent.clientWidth,
         height: parent.clientHeight,
         isDrawingMode: true,
       });
+
+      // Fix #7: Initialize PencilBrush immediately so pen works on first open
+      const brush = new fabric.PencilBrush(canvas);
+      brush.color = strokeColor;
+      brush.width = strokeWidth;
+      canvas.freeDrawingBrush = brush;
 
       fabricRef.current = canvas;
 
@@ -138,6 +162,35 @@ export function AnnotationCanvas({
       }
     };
   }, [documentId, pageNumber, triggerAutoSave]);
+
+  // Force-save when hiding to prevent data loss (bypass 2s debounce)
+  const prevVisibleRef = useRef(visible);
+  useEffect(() => {
+    if (prevVisibleRef.current && !visible) {
+      // Was visible, now hidden — flush save immediately
+      if (autoSaveTimerRef.current) clearTimeout(autoSaveTimerRef.current);
+      if (fabricRef.current) {
+        const json = fabricRef.current.toJSON();
+        saveAnnotation(documentId, pageNumber, json);
+      }
+    }
+    prevVisibleRef.current = visible;
+  }, [visible, documentId, pageNumber]);
+
+  // Resize canvas when parent size changes (zoom, PDF load, etc.)
+  useEffect(() => {
+    const el = canvasRef.current?.parentElement;
+    if (!el) return;
+    const observer = new ResizeObserver(() => {
+      const canvas = fabricRef.current;
+      if (!canvas) return;
+      if (el.clientWidth > 0 && el.clientHeight > 0) {
+        canvas.setDimensions({ width: el.clientWidth, height: el.clientHeight });
+      }
+    });
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
 
   // Update tool mode
   useEffect(() => {
@@ -335,6 +388,7 @@ export function AnnotationCanvas({
     { tool: "circle", icon: Circle, label: "Circle" },
     { tool: "text", icon: Type, label: "Text" },
     { tool: "arrow", icon: ArrowRight, label: "Arrow" },
+    { tool: "hand", icon: Hand, label: "Pan" },
   ];
 
   const toolbarContent = (
@@ -379,15 +433,25 @@ export function AnnotationCanvas({
     </div>
   );
 
+  const isHandTool = activeTool === "hand";
+  const passThrough = !visible || isHandTool;
+
   return (
-    <div className="absolute inset-0 z-20">
+    <div
+      className={`absolute inset-0 z-20 ${passThrough ? "pointer-events-none" : ""}`}
+      style={{ touchAction: !passThrough ? "none" : "auto" }}
+    >
       {/* Annotation toolbar: portal to parent container or inline fallback */}
-      {toolbarContainer === undefined ? (
-        <div className="absolute left-2 top-2 z-30">{toolbarContent}</div>
-      ) : toolbarContainer ? (
-        createPortal(toolbarContent, toolbarContainer)
-      ) : null}
-      <canvas ref={canvasRef} className="absolute inset-0" />
+      {visible && (
+        <>
+          {toolbarContainer === undefined ? (
+            <div className="absolute left-2 top-2 z-30 pointer-events-auto">{toolbarContent}</div>
+          ) : toolbarContainer ? (
+            createPortal(toolbarContent, toolbarContainer)
+          ) : null}
+        </>
+      )}
+      <canvas ref={canvasRef} />
     </div>
   );
 }

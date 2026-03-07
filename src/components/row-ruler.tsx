@@ -5,10 +5,11 @@ import { useState, useRef, useCallback, useEffect } from "react";
 interface RowRulerProps {
   initialPosition: number;
   initialHeight?: number;
+  scale?: number;
   onPositionChange: (position: number, height: number) => void;
 }
 
-export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange }: RowRulerProps) {
+export function RowRuler({ initialPosition, initialHeight = 32, scale = 1, onPositionChange }: RowRulerProps) {
   const [position, setPosition] = useState(initialPosition);
   const [height, setHeight] = useState(initialHeight);
   const [dragging, setDragging] = useState(false);
@@ -32,7 +33,7 @@ export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange
       const startPos = positionRef.current;
 
       const handleMouseMove = (e: MouseEvent) => {
-        const delta = e.clientY - startY;
+        const delta = (e.clientY - startY) / scale;
         const newPos = Math.max(0, startPos + delta);
         setPosition(newPos);
         positionRef.current = newPos;
@@ -48,19 +49,21 @@ export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [onPositionChange]
+    [onPositionChange, scale]
   );
 
   const handleTouchStart = useCallback(
     (e: React.TouchEvent) => {
+      e.preventDefault();
       const touch = e.touches[0];
       setDragging(true);
       const startY = touch.clientY;
       const startPos = positionRef.current;
 
       const handleTouchMove = (e: TouchEvent) => {
+        e.preventDefault();
         const touch = e.touches[0];
-        const delta = touch.clientY - startY;
+        const delta = (touch.clientY - startY) / scale;
         const newPos = Math.max(0, startPos + delta);
         setPosition(newPos);
         positionRef.current = newPos;
@@ -73,10 +76,10 @@ export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange
         onPositionChange(positionRef.current, heightRef.current);
       };
 
-      document.addEventListener("touchmove", handleTouchMove);
+      document.addEventListener("touchmove", handleTouchMove, { passive: false });
       document.addEventListener("touchend", handleTouchEnd);
     },
-    [onPositionChange]
+    [onPositionChange, scale]
   );
 
   // Resize handle on bottom edge
@@ -88,7 +91,7 @@ export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange
       const startHeight = heightRef.current;
 
       const handleMouseMove = (e: MouseEvent) => {
-        const delta = e.clientY - startY;
+        const delta = (e.clientY - startY) / scale;
         const newHeight = Math.max(16, startHeight + delta);
         setHeight(newHeight);
         heightRef.current = newHeight;
@@ -103,20 +106,20 @@ export function RowRuler({ initialPosition, initialHeight = 32, onPositionChange
       document.addEventListener("mousemove", handleMouseMove);
       document.addEventListener("mouseup", handleMouseUp);
     },
-    [onPositionChange]
+    [onPositionChange, scale]
   );
 
   return (
     <div
-      className="absolute left-0 right-0 z-10 cursor-ns-resize"
-      style={{ top: `${position}px` }}
+      className="absolute left-0 right-0 z-10 cursor-ns-resize touch-none"
+      style={{ top: `${position * scale}px` }}
       onMouseDown={handleMouseDown}
       onTouchStart={handleTouchStart}
     >
       {/* Translucent bar */}
       <div
         className="w-full bg-yellow-300/40 border-y border-yellow-500/60"
-        style={{ height: `${height}px` }}
+        style={{ height: `${height * scale}px` }}
       />
       {/* Handle indicator */}
       <div className="absolute -right-1 top-1/2 -translate-y-1/2 rounded bg-yellow-500 px-1 py-0.5 text-[10px] font-bold text-white shadow">
