@@ -53,6 +53,7 @@ export function AnnotationCanvas({
   // Auto-save refs
   const autoSaveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isInitializedRef = useRef(false);
+  const scaleRef = useRef(scale);
 
   // Drag-to-draw refs
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -109,6 +110,7 @@ export function AnnotationCanvas({
       brush.width = strokeWidth;
       canvas.freeDrawingBrush = brush;
 
+      canvas.setZoom(scale);
       fabricRef.current = canvas;
 
       // Load existing annotations
@@ -186,11 +188,25 @@ export function AnnotationCanvas({
       if (!canvas) return;
       if (el.clientWidth > 0 && el.clientHeight > 0) {
         canvas.setDimensions({ width: el.clientWidth, height: el.clientHeight });
+        canvas.setZoom(scaleRef.current);
+        canvas.renderAll();
       }
     });
     observer.observe(el);
     return () => observer.disconnect();
   }, []);
+
+  // Sync zoom when scale prop changes
+  useEffect(() => {
+    scaleRef.current = scale;
+    const canvas = fabricRef.current;
+    if (!canvas) return;
+    const el = canvasRef.current?.parentElement;
+    if (!el || el.clientWidth === 0 || el.clientHeight === 0) return;
+    canvas.setDimensions({ width: el.clientWidth, height: el.clientHeight });
+    canvas.setZoom(scale);
+    canvas.renderAll();
+  }, [scale]);
 
   // Update tool mode
   useEffect(() => {

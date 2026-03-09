@@ -280,7 +280,7 @@ export function PdfViewer({ document: doc, floatingRowCounter, floatingTimer }: 
           <Bookmark className="h-4 w-4" />
         </Button>
         {showBookmarks && (
-          <div className="absolute top-full right-0 z-50 mt-1 w-64 rounded-lg border bg-background p-2 shadow-lg">
+          <div className="absolute top-full left-0 sm:left-auto sm:right-0 z-50 mt-1 w-64 rounded-lg border bg-background p-2 shadow-lg">
             <div className="flex gap-1 mb-2">
               <Input
                 placeholder="Bookmark name"
@@ -376,8 +376,8 @@ export function PdfViewer({ document: doc, floatingRowCounter, floatingTimer }: 
       ref={containerRef}
       className={
         isFullscreen
-          ? "relative h-full w-full overflow-auto"
-          : "relative mx-auto flex-1 min-h-0 overflow-auto rounded-lg border bg-muted/20"
+          ? "absolute inset-0 overflow-auto"
+          : "absolute inset-0 overflow-auto rounded-lg border bg-muted/20"
       }
     >
       <Document
@@ -422,7 +422,7 @@ export function PdfViewer({ document: doc, floatingRowCounter, floatingTimer }: 
           {toolbar}
           <div ref={setAnnotationToolbarEl} className="absolute top-full left-1/2 z-50 -translate-x-1/2" />
         </div>
-        <div className="flex-1 overflow-hidden">
+        <div className="relative flex-1 min-h-0">
           {pdfContent}
         </div>
       </div>
@@ -430,12 +430,14 @@ export function PdfViewer({ document: doc, floatingRowCounter, floatingTimer }: 
   }
 
   return (
-    <div className="flex flex-col min-h-0 flex-1">
+    <div className="flex flex-col min-h-0 min-w-0 flex-1">
       <div className="relative flex-shrink-0">
         {toolbar}
         <div ref={setAnnotationToolbarEl} className="absolute top-full left-1/2 z-30 -translate-x-1/2 mt-1" />
       </div>
-      {pdfContent}
+      <div className="relative flex-1 min-h-0">
+        {pdfContent}
+      </div>
     </div>
   );
 }

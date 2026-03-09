@@ -27,7 +27,7 @@ export default async function ProjectDetailPage({
     ]);
 
   return (
-    <div className="h-full flex flex-col min-h-0">
+    <div className="h-full flex flex-col min-h-0 min-w-0">
       <ProjectDetailClient
       project={{
         id: project.id,
